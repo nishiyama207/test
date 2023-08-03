@@ -11,7 +11,7 @@
     <style>
       .map {
         width: 100%;
-        height: 500px;
+        height: 470px;
       }
     </style>
   </head>
@@ -27,13 +27,14 @@
             <option value="Polygon">Polygon</option>
             <!-- <option value="Circle">Circle</option> -->
           </select>
-          <button id="remove">remove</button>
+          <button class="btn btn-light" id="remove">remove</button>
         </form>
         <input type="checkbox" id="pointlayer" checked> Point
         <input type="checkbox" id="linelayer" checked> LineString
         <input type="checkbox" id="polygonlayer" checked> Polygon
         <br>
         <input type="checkbox" id="vectorlayer" checked> vector
+        <div id="attributes-table"></div>
       </div>
     </div>
     <!-- Pointer events polyfill for old browsers, see https://caniuse.com/#feat=pointer -->
@@ -42,3 +43,4 @@
     <!-- built files will be auto injected -->
   </body>
 </html>
+
