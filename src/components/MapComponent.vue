@@ -2,12 +2,12 @@
   <div>
     <div id="map" class="map"></div>
     <label for="type">Draw type:</label>
-    <select id="type" v-model="selectedType" @change="changeDrawType">
+    <select id="type" v-model="selectedType">
       <option value="Point">Point</option>
       <option value="LineString">LineString</option>
       <option value="Polygon">Polygon</option>
     </select>
-    <button class="btn btn-light" id="remove">remove</button>
+    <button class="btn btn-light" @click="removeSelectedFeature">削除</button>
     <div>
       <input type="checkbox" id="pointlayer" v-model="pointLayerVisible"> Point
       <input type="checkbox" id="linelayer" v-model="lineLayerVisible"> LineString
@@ -24,7 +24,7 @@
       </tr>
       </tbody></table>
     </div>
-    <button class="btn btn-light" id="saveButton" >保存</button>
+    <button class="btn btn-light" @click="saveAttributes">保存</button>
   </div>
 </template>
   
@@ -34,7 +34,6 @@
   import { OSM, Vector as VectorSource } from 'ol/source';
   import { ref, onMounted, watch, computed, reactive, watchEffect } from 'vue';
   import { get as getProjection } from 'ol/proj';
-  //import Feature from 'ol/Feature';
   import { Collection } from 'ol';
   import View from 'ol/View';
   import Map from 'ol/Map';
@@ -47,33 +46,33 @@
   const source1 = new VectorSource({ wrapX: false });
   const source2 = new VectorSource({ wrapX: false });
   const source3 = new VectorSource({ wrapX: false });
+  const vector = new VectorLayer({ source: source, });
+  const vector1 = new VectorLayer({ source: source1, });
+  const vector2 = new VectorLayer({ source: source2, });
+  const vector3 = new VectorLayer({ source: source3, });
   const pointLayerVisible = ref(true);
   const lineLayerVisible = ref(true);
   const polygonLayerVisible = ref(true);
   const vectorLayerVisible = ref(true);
   let select;
-  const selectedFeatures = ref([]); // 選択されたフィーチャとその属性を格納する配列
+  let nextid = 1; // 次のid
+  const selectedFeatures = ref([]);
   const idInput = ref('');
   const nameInput = ref('');
   const dateInput = ref('');
 
+
   onMounted(() => {
+
     // OpenStreetMapから地図タイルを表示する
     const raster = new TileLayer({
       source: new OSM(),
     });
-    
-    // ベクタデータを表示するためのソースとレイヤ
-    const vector = new VectorLayer({ source: source, });
-    const vector1 = new VectorLayer({ source: source1, });
-    const vector2 = new VectorLayer({ source: source2, });
-    const vector3 = new VectorLayer({ source: source3, });
-    
+
     // mapを作成
     const extent = getProjection('EPSG:3857').getExtent().slice();
     extent[0] += extent[0];
     extent[2] += extent[2];
-  
     map = new Map({
       layers: [raster,vector1,vector2,vector3,vector,],
       target: 'map',
@@ -84,6 +83,9 @@
       }),
     });
 
+    // 初期Point
+    addInteraction();
+
     // 選択中の図形
     select = new Select({
       layers: [vector1,vector2,vector3],
@@ -91,32 +93,8 @@
     });
     // 属性表示
     select.on('select', (event) => {
-      const selected = event.target.getFeatures().getArray();
-      selectedFeatures.value = selected.map(feature => feature.getProperties());
+      selectedFeatures.value = event.target.getFeatures().getArray().map(feature => feature.getProperties());
     });
-
-  // 保存ボタンがクリックされたときの処理
-  const onSaveButtonClick = () => {
-    console.log('selectedFeatures:', selectedFeatures.value);
-    const idInput = document.getElementById('idInput');
-    const nameInput = document.getElementById('nameInput');
-    const dateInput = document.getElementById('dateInput');
-    const id = idInput.value;
-    const name = nameInput.value;
-    const inpDate = dateInput.value;
-    selectedFeatures.value.forEach((feature) => {
-      feature.id = id;
-      feature.name = name;
-      feature.inpDate = inpDate;
-      console.log('name:', feature.name);
-    });
-  };
-
-    // 初期Point
-    addInteraction();
-
-    document.getElementById('saveButton').onclick = onSaveButtonClick;
-
 
     // 編集
     const modify1 = new Modify({source: source1});
@@ -136,9 +114,16 @@
       vector3.setVisible(polygonLayerVisible.value);
     });
     watch(vectorLayerVisible, (newVal) => {
-      vector1.setVisible(newVal && pointLayerVisible.value);
-      vector2.setVisible(newVal && lineLayerVisible.value);
-      vector3.setVisible(newVal && polygonLayerVisible.value);
+      // vectorLayerVisible チェックボックスがオンの場合、各レイヤーの表示状態も連動して切り替わる
+      if (newVal) {
+        vector1.setVisible(pointLayerVisible.value);
+        vector2.setVisible(lineLayerVisible.value);
+        vector3.setVisible(polygonLayerVisible.value);
+      } else {
+        vector1.setVisible(false);
+        vector2.setVisible(false);
+        vector3.setVisible(false);
+      }
     });
     
   });
@@ -152,7 +137,34 @@
   });
   // watch関数:特定のリアクティブ変数の変更を監視する
 
-  let nextid = 1; // 次のid
+  // 削除
+  function removeSelectedFeature() {
+    const selectedFeatures = select?.getFeatures();
+    if (selectedFeatures.getLength() > 0) {
+      const feature = selectedFeatures.item(0);
+      const featureSource = feature.get('source');
+      featureSource.removeFeature(feature);
+      selectedFeatures.clear();
+    }
+  }
+
+  // 属性情報保存
+  function saveAttributes() {
+    console.log('selectedFeatures:', selectedFeatures.value);
+    const idInput = document.getElementById('idInput');
+    const nameInput = document.getElementById('nameInput');
+    const dateInput = document.getElementById('dateInput');
+    const id = idInput.value;
+    const name = nameInput.value;
+    const inpDate = dateInput.value;
+    selectedFeatures.value.forEach((feature) => {
+      feature.id = id;
+      feature.name = name;
+      feature.inpDate = inpDate;
+      console.log('name:', feature.name);
+    });
+    console.log('name:', name);
+  };
 
   function addInteraction() {
     // 以前の描画とスナップのインタラクションを削除
@@ -205,23 +217,10 @@
       feature.set('source', drawOptions.source);
     });
 
-    // 削除
-    document.getElementById('remove').onclick = function (event) {
-      event.preventDefault();
-      const selectedFeatures = select?.getFeatures();
-      if (selectedFeatures) {
-        const feature = selectedFeatures.item(0);
-        const featureSource = feature.get('source');
-        if (featureSource) {
-          featureSource.removeFeature(feature);
-        }
-        selectedFeatures.clear();
-      }
-    };
   }
   // addInteraction終わり
+
 </script>
-  
 <style>
   .map {
     width: 100%;
