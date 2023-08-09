@@ -1,17 +1,9 @@
 // セットアップ系の処理
 // olのcss読込や、「App.vue」とindex.html内のエレメントとの紐づけ処理
 
-// import Map from 'ol/Map.js';
-// import View from 'ol/View.js';
-// import {OSM, Vector as VectorSource} from 'ol/source.js';
-// import {Tile as TileLayer, Vector as VectorLayer} from 'ol/layer.js';
-// import {Draw, Modify, Snap} from 'ol/interaction.js';
-// import {get} from 'ol/proj.js';
-// import { Select } from 'ol/interaction.js';
-// import { Collection } from 'ol';
 import { createApp } from 'vue'
 import App from './App.vue'
-//import { Geometry } from 'ol/geom';
+import 'ol/ol.css'
 
 createApp(App).mount('#app')
 

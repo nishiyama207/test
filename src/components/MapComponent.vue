@@ -18,9 +18,9 @@
     <div id="attributes-table">
       <table><tbody>
       <tr>
-        <td>ID: <input type="text" id="idInput" :value="selectedFeatures[0]?.id" /></td>
-        <td>Name: <input type="text" id="nameInput" :value="selectedFeatures[0]?.name" /></td>
-        <td>Date: <input type="text" id="dateInput" :value="selectedFeatures[0]?.inpDate" /></td>
+        <td>ID: <input type="text" id="idInput" v-model="idInput" /></td>
+        <td>Name: <input type="text" id="nameInput" v-model="nameInput"  /></td>
+        <td>Date: <input type="text" id="dateInput" v-model="dateInput"  /></td>
       </tr>
       </tbody></table>
     </div>
@@ -28,116 +28,75 @@
   </div>
 </template>
   
-<script setup>
+<script setup lang="ts">
   import { Tile as TileLayer, Vector as VectorLayer } from 'ol/layer';
   import { Draw, Modify, Snap, Select } from 'ol/interaction';
   import { OSM, Vector as VectorSource } from 'ol/source';
-  import { ref, onMounted, watch, computed, reactive, watchEffect } from 'vue';
-  import { get as getProjection } from 'ol/proj';
+  import { ref, onMounted, watch, computed } from 'vue';
   import { Collection } from 'ol';
   import View from 'ol/View';
   import Map from 'ol/Map';
-  
-  const selectedType = ref('Point');
-  let map;
-  let draw;
-  let snap;
+  import Feature from 'ol/Feature'
+  import { altKeyOnly, click } from "ol/events/condition";
+
+  // ---------------------------------------------------------------------
+  // map系
+  // ---------------------------------------------------------------------
+  let draw :Draw;
+  let snap :Snap;
   const source = new VectorSource({ wrapX: false });
-  const source1 = new VectorSource({ wrapX: false });
-  const source2 = new VectorSource({ wrapX: false });
-  const source3 = new VectorSource({ wrapX: false });
+  const PointSource = new VectorSource({ wrapX: false });
+  const LineSource = new VectorSource({ wrapX: false });
+  const PolygonSource = new VectorSource({ wrapX: false });
   const vector = new VectorLayer({ source: source, });
-  const vector1 = new VectorLayer({ source: source1, });
-  const vector2 = new VectorLayer({ source: source2, });
-  const vector3 = new VectorLayer({ source: source3, });
-  const pointLayerVisible = ref(true);
-  const lineLayerVisible = ref(true);
-  const polygonLayerVisible = ref(true);
-  const vectorLayerVisible = ref(true);
-  let select;
+  const PointLayer = new VectorLayer({ source: PointSource, });
+  const LineLayer = new VectorLayer({ source: LineSource, });
+  const PolygonLayer = new VectorLayer({ source: PolygonSource, });
+  let select :Select;
   let nextid = 1; // 次のid
-  const selectedFeatures = ref([]);
-  const idInput = ref('');
-  const nameInput = ref('');
-  const dateInput = ref('');
 
-
-  onMounted(() => {
-
-    // OpenStreetMapから地図タイルを表示する
-    const raster = new TileLayer({
-      source: new OSM(),
-    });
-
-    // mapを作成
-    const extent = getProjection('EPSG:3857').getExtent().slice();
-    extent[0] += extent[0];
-    extent[2] += extent[2];
-    map = new Map({
-      layers: [raster,vector1,vector2,vector3,vector,],
-      target: 'map',
-      view: new View({
-        center: [-11000000, 4600000],
-        zoom: 4,
-        extent: extent,
-      }),
-    });
-
-    // 初期Point
-    addInteraction();
-
-    // 選択中の図形
-    select = new Select({
-      layers: [vector1,vector2,vector3],
-      features: new Collection(source.getFeatures()),
-    });
-    // 属性表示
-    select.on('select', (event) => {
-      selectedFeatures.value = event.target.getFeatures().getArray().map(feature => feature.getProperties());
-    });
-
-    // 編集
-    const modify1 = new Modify({source: source1});
-    map.addInteraction(modify1);
-    const modify2 = new Modify({source: source2});
-    map.addInteraction(modify2);
-    const modify3 = new Modify({source: source3});
-    map.addInteraction(modify3);
-
-    map.addInteraction(select);
-
-
-    // レイヤ表示切替
-    watch([pointLayerVisible, lineLayerVisible, polygonLayerVisible], () => {
-      vector1.setVisible(pointLayerVisible.value);
-      vector2.setVisible(lineLayerVisible.value);
-      vector3.setVisible(polygonLayerVisible.value);
-    });
-    watch(vectorLayerVisible, (newVal) => {
-      // vectorLayerVisible チェックボックスがオンの場合、各レイヤーの表示状態も連動して切り替わる
-      if (newVal) {
-        vector1.setVisible(pointLayerVisible.value);
-        vector2.setVisible(lineLayerVisible.value);
-        vector3.setVisible(polygonLayerVisible.value);
-      } else {
-        vector1.setVisible(false);
-        vector2.setVisible(false);
-        vector3.setVisible(false);
-      }
-    });
-    
+  // OpenStreetMapから地図タイルを表示する
+  const raster = new TileLayer({
+    source: new OSM(),
   });
-  // onMounted終わり
 
-  // セレクトボックスが変更されたら
-  watch(selectedType, () => {
-    map.removeInteraction(draw);
-    map.removeInteraction(snap);
-    addInteraction();
+  // mapを作成
+  const  map = new Map({
+    layers: [raster,PointLayer,LineLayer,PolygonLayer,vector,],
+    // target: 'map',
+    view: new View({
+      center: [-11000000, 4600000],
+      zoom: 4,
+    }),
   });
-  // watch関数:特定のリアクティブ変数の変更を監視する
 
-  // 削除
+  // ---------------------------------------------------------------------
+  // state
+  // ---------------------------------------------------------------------
+  const selectedType = ref<'Point'|'LineString'|'Polygon'>('Point');  
+  const pointLayerVisible = ref<boolean>(true);
+  const lineLayerVisible = ref<boolean>(true);
+  const polygonLayerVisible = ref<boolean>(true);
+  const vectorLayerVisible = ref<boolean>(true);  
+  const selectedFeatures = ref<Feature[]>([]);
+  const idInput = ref<string>('')
+  const nameInput = ref<string>('')
+  const dateInput = ref<string>('')
+  
+  // ---------------------------------------------------------------------
+  // computed
+  // ---------------------------------------------------------------------
+
+  // ---------------------------------------------------------------------
+  // 関数系
+  // ---------------------------------------------------------------------
+    /**
+   *  drawendのEvent用関数
+   *
+   *  選択した図形を削除する
+   *  @param e DrawEvent
+   *  @return {void}
+   */
   function removeSelectedFeature() {
     const selectedFeatures = select?.getFeatures();
     if (selectedFeatures.getLength() > 0) {
@@ -148,23 +107,27 @@
     }
   }
 
-  // 属性情報保存
+    /**
+   *  drawendのEvent用関数
+   *
+   *  属性情報を更新する
+   *  @param e DrawEvent
+   *  @return {void}
+   */
   function saveAttributes() {
     console.log('selectedFeatures:', selectedFeatures.value);
-    const idInput = document.getElementById('idInput');
-    const nameInput = document.getElementById('nameInput');
-    const dateInput = document.getElementById('dateInput');
+    
     const id = idInput.value;
     const name = nameInput.value;
     const inpDate = dateInput.value;
+
     selectedFeatures.value.forEach((feature) => {
       feature.id = id;
       feature.name = name;
       feature.inpDate = inpDate;
-      console.log('name:', feature.name);
     });
     console.log('name:', name);
-  };
+  }
 
   function addInteraction() {
     // 以前の描画とスナップのインタラクションを削除
@@ -173,16 +136,16 @@
 
     // 描画オプションの設定
     const drawOptions = {
-      source: null,
+      source: source, // 仮
       type: selectedType.value,
     };
     // 選択された図形の種類に応じてソースを設定
     if (selectedType.value === 'Point') {
-      drawOptions.source = source1;
+      drawOptions.source = PointSource;
     } else if (selectedType.value === 'LineString') {
-      drawOptions.source = source2;
+      drawOptions.source = LineSource;
     } else if (selectedType.value === 'Polygon') {
-      drawOptions.source = source3;
+      drawOptions.source = PolygonSource;
     }
 
     // Draw インスタンスを作成
@@ -214,11 +177,73 @@
     // sourceを設定
     drawOptions.source.on('addfeature', (event) => {
       const feature = event.feature;
-      feature.set('source', drawOptions.source);
+      feature?.set('source', drawOptions.source);
     });
 
   }
-  // addInteraction終わり
+  // ---------------------------------------------------------------------
+  // ライフサイクルフック系
+  // ---------------------------------------------------------------------
+  
+  // watch関数:特定のリアクティブ変数の変更を監視する
+  // レイヤ表示切替
+  watch([pointLayerVisible, lineLayerVisible, polygonLayerVisible], () => {
+    PointLayer.setVisible(pointLayerVisible.value);
+    LineLayer.setVisible(lineLayerVisible.value);
+    PolygonLayer.setVisible(polygonLayerVisible.value);
+  });
+
+  watch(vectorLayerVisible, (newVal) => {
+    // vectorLayerVisible チェックボックスがオンの場合、各レイヤーの表示状態も連動して切り替わる
+    if (newVal) {
+      PointLayer.setVisible(pointLayerVisible.value);
+      LineLayer.setVisible(lineLayerVisible.value);
+      PolygonLayer.setVisible(polygonLayerVisible.value);
+    } else {
+      PointLayer.setVisible(false);
+      LineLayer.setVisible(false);
+      PolygonLayer.setVisible(false);
+    }
+  });
+
+  // セレクトボックスが変更されたら
+  watch(selectedType, () => {
+    map.removeInteraction(draw);
+    map.removeInteraction(snap);
+    addInteraction();
+  });
+  
+
+  onMounted(() => {
+    map.setTarget("map");
+
+    // 初期Point
+    addInteraction();
+
+    // 選択中の図形
+    select = new Select({
+      layers: [PointLayer,LineLayer,PolygonLayer],
+      features: new Collection(source.getFeatures()),
+      condition: (mapBrowserEvent) => {
+      return click(mapBrowserEvent) && altKeyOnly(mapBrowserEvent);
+    },
+    });
+    // 属性表示
+    select.on('select', (event) => {
+      selectedFeatures.value = event.target.getFeatures().getArray().map(feature => feature.getProperties());
+    });
+
+    // 編集
+    // const modify1 = new Modify({source: PointSource});
+    // map.addInteraction(modify1);
+    // const modify2 = new Modify({source: LineSource});
+    // map.addInteraction(modify2);
+    // const modify3 = new Modify({source: PolygonSource});
+    // map.addInteraction(modify3);
+
+    map.addInteraction(select);
+    
+  });
 
 </script>
 <style>
