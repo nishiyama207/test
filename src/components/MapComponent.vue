@@ -114,21 +114,27 @@
    *  @param e DrawEvent
    *  @return {void}
    */
-  function saveAttributes() {
-    console.log('selectedFeatures:', selectedFeatures.value);
-    
-    const id = idInput.value;
-    const name = nameInput.value;
-    const inpDate = dateInput.value;
+   function saveAttributes() {
+      const id = idInput.value;
+      const name = nameInput.value;
+      const inpDate = dateInput.value;
 
-    selectedFeatures.value.forEach((feature) => {
-      feature.id = id;
-      feature.name = name;
-      feature.inpDate = inpDate;
-    });
-    console.log('name:', name);
-  }
+      selectedFeatures.value.forEach((feature) => {
+        feature.setProperties({
+          id: id,
+          name: name,
+          inpDate: inpDate,
+        });
+      });
+    }
 
+   /**
+   *  drawendのEvent用関数
+   *
+   *  インタラクション追加
+   *  @param e DrawEvent
+   *  @return {void}
+   */
   function addInteraction() {
     // 以前の描画とスナップのインタラクションを削除
     map.removeInteraction(draw);
@@ -193,8 +199,8 @@
     PolygonLayer.setVisible(polygonLayerVisible.value);
   });
 
+  // vectorLayerVisible チェックボックスがオンの場合、各レイヤーの表示状態も連動して切り替わる
   watch(vectorLayerVisible, (newVal) => {
-    // vectorLayerVisible チェックボックスがオンの場合、各レイヤーの表示状態も連動して切り替わる
     if (newVal) {
       PointLayer.setVisible(pointLayerVisible.value);
       LineLayer.setVisible(lineLayerVisible.value);
@@ -212,6 +218,17 @@
     map.removeInteraction(snap);
     addInteraction();
   });
+
+  // selectedFeaturesの変更を監視して、属性情報を図形に反映する
+  watch(selectedFeatures, () => {
+    selectedFeatures.value.forEach((feature) => {
+      feature.setProperties({
+        id: idInput.value,
+        name: nameInput.value,
+        inpDate: dateInput.value,
+      });
+    });
+  });
   
 
   onMounted(() => {
@@ -220,7 +237,7 @@
     // 初期Point
     addInteraction();
 
-    // 選択中の図形
+    // 選択
     select = new Select({
       layers: [PointLayer,LineLayer,PolygonLayer],
       features: new Collection(source.getFeatures()),
@@ -228,9 +245,15 @@
       return click(mapBrowserEvent) && altKeyOnly(mapBrowserEvent);
     },
     });
-    // 属性表示
+
+    // 選択中の図形を取得し、属性情報をテキストボックスにセットする
     select.on('select', (event) => {
-      selectedFeatures.value = event.target.getFeatures().getArray().map(feature => feature.getProperties());
+      const selectedFeature = event.target.getFeatures().getArray()[0]; // 選択された最初の図形を取得
+      if (selectedFeature) {
+        idInput.value = selectedFeature.get('id') ;
+        nameInput.value = selectedFeature.get('name') ;
+        dateInput.value = selectedFeature.get('inpDate') ;
+      }
     });
 
     // 編集
