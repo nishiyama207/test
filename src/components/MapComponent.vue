@@ -53,6 +53,8 @@
   const LineLayer = new VectorLayer({ source: LineSource, });
   const PolygonLayer = new VectorLayer({ source: PolygonSource, });
   let select :Select;
+  let selectedFeatures ;
+  let selectedFeature :Feature ;
   let nextid = 1; // 次のid
 
   // OpenStreetMapから地図タイルを表示する
@@ -78,7 +80,7 @@
   const lineLayerVisible = ref<boolean>(true);
   const polygonLayerVisible = ref<boolean>(true);
   const vectorLayerVisible = ref<boolean>(true);  
-  const selectedFeatures = ref<Feature[]>([]);
+  //const selectedFeatures = ref<Feature[]>([]);
   const idInput = ref<string>('')
   const nameInput = ref<string>('')
   const dateInput = ref<string>('')
@@ -98,12 +100,14 @@
    *  @return {void}
    */
   function removeSelectedFeature() {
-    const selectedFeatures = select?.getFeatures();
+    selectedFeatures = select?.getFeatures();
     if (selectedFeatures.getLength() > 0) {
       const feature = selectedFeatures.item(0);
       const featureSource = feature.get('source');
       featureSource.removeFeature(feature);
-      selectedFeatures.clear();
+      idInput.value = "" ;
+      nameInput.value = "" ;
+      dateInput.value = "" ;
     }
   }
 
@@ -115,18 +119,15 @@
    *  @return {void}
    */
    function saveAttributes() {
-      const id = idInput.value;
-      const name = nameInput.value;
-      const inpDate = dateInput.value;
-
-      selectedFeatures.value.forEach((feature) => {
-        feature.setProperties({
-          id: id,
-          name: name,
-          inpDate: inpDate,
-        });
+    selectedFeatures = select?.getFeatures();
+    selectedFeatures.forEach((feature) => {
+      feature.setProperties({
+        id: idInput.value,
+        name: nameInput.value,
+        inpDate: dateInput.value,
       });
-    }
+    });
+   }
 
    /**
    *  drawendのEvent用関数
@@ -187,6 +188,7 @@
     });
 
   }
+
   // ---------------------------------------------------------------------
   // ライフサイクルフック系
   // ---------------------------------------------------------------------
@@ -218,17 +220,6 @@
     map.removeInteraction(snap);
     addInteraction();
   });
-
-  // selectedFeaturesの変更を監視して、属性情報を図形に反映する
-  watch(selectedFeatures, () => {
-    selectedFeatures.value.forEach((feature) => {
-      feature.setProperties({
-        id: idInput.value,
-        name: nameInput.value,
-        inpDate: dateInput.value,
-      });
-    });
-  });
   
 
   onMounted(() => {
@@ -248,7 +239,7 @@
 
     // 選択中の図形を取得し、属性情報をテキストボックスにセットする
     select.on('select', (event) => {
-      const selectedFeature = event.target.getFeatures().getArray()[0]; // 選択された最初の図形を取得
+      selectedFeature = event.target.getFeatures().getArray()[0]; // 選択された最初の図形を取得
       if (selectedFeature) {
         idInput.value = selectedFeature.get('id') ;
         nameInput.value = selectedFeature.get('name') ;
@@ -257,12 +248,12 @@
     });
 
     // 編集
-    // const modify1 = new Modify({source: PointSource});
-    // map.addInteraction(modify1);
-    // const modify2 = new Modify({source: LineSource});
-    // map.addInteraction(modify2);
-    // const modify3 = new Modify({source: PolygonSource});
-    // map.addInteraction(modify3);
+    const modify1 = new Modify({source: PointSource});
+    map.addInteraction(modify1);
+    const modify2 = new Modify({source: LineSource});
+    map.addInteraction(modify2);
+    const modify3 = new Modify({source: PolygonSource});
+    map.addInteraction(modify3);
 
     map.addInteraction(select);
     
