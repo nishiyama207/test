@@ -38,6 +38,34 @@
   import Map from 'ol/Map';
   import Feature from 'ol/Feature'
   import { altKeyOnly, click } from "ol/events/condition";
+  import axios from 'axios';
+
+  // とりあえず保存ボタンクリックで呼び出す
+  async function saveToDatabase(data: { id: number; name: string; inpDate: string; }) {
+    try {
+      // const response = await axios.post('http://localhost:5047/api/feature/save', data);
+      // response;
+      axios.get("http://localhost:5047/api/feature")
+      .then(response => console.log(response))
+            .catch(error => console.log(error))
+      // 成功時の処理
+      console.log('成功')
+    } catch (error) {
+      console.error('Error saving to database:', error);
+      // エラー時の処理
+      console.log('失敗')
+    }
+  }
+  // awaitはDBの中をリードするまで待ってくれる処理.これが無いと画面が表示されてから値が描画される危険がある
+
+// 例
+const featureData = {
+  id: 1,
+  name: 'Example Feature',
+  inpDate: '2023-08-10',
+};
+
+
 
   // ---------------------------------------------------------------------
   // map系
@@ -118,16 +146,17 @@
    *  @param e DrawEvent
    *  @return {void}
    */
-   function saveAttributes() {
+  function saveAttributes() {
+    saveToDatabase(featureData);
     selectedFeatures = select?.getFeatures();
-    selectedFeatures.forEach((feature) => {
+    selectedFeatures.forEach(async (feature) => {
       feature.setProperties({
         id: idInput.value,
         name: nameInput.value,
         inpDate: dateInput.value,
       });
-    });
-   }
+      });
+  }
 
    /**
    *  drawendのEvent用関数
