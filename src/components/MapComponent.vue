@@ -39,33 +39,7 @@
   import Feature from 'ol/Feature'
   import { altKeyOnly, click } from "ol/events/condition";
   import axios from 'axios';
-
-  // とりあえず保存ボタンクリックで呼び出す
-  async function saveToDatabase(data: { id: number; name: string; inpDate: string; }) {
-    try {
-      // const response = await axios.post('http://localhost:5047/api/feature/save', data);
-      // response;
-      axios.get("http://localhost:5047/api/feature")
-      .then(response => console.log(response))
-            .catch(error => console.log(error))
-      // 成功時の処理
-      console.log('成功')
-    } catch (error) {
-      console.error('Error saving to database:', error);
-      // エラー時の処理
-      console.log('失敗')
-    }
-  }
-  // awaitはDBの中をリードするまで待ってくれる処理.これが無いと画面が表示されてから値が描画される危険がある
-
-// 例
-const featureData = {
-  id: 1,
-  name: 'Example Feature',
-  inpDate: '2023-08-10',
-};
-
-
+  import GeoJSON from 'ol/format/GeoJSON.js';
 
   // ---------------------------------------------------------------------
   // map系
@@ -92,13 +66,14 @@ const featureData = {
 
   // mapを作成
   const  map = new Map({
-    layers: [raster,PointLayer,LineLayer,PolygonLayer,vector,],
+    layers: [raster,PointLayer,LineLayer,PolygonLayer,vector],
     // target: 'map',
     view: new View({
       center: [-11000000, 4600000],
       zoom: 4,
     }),
   });
+
 
   // ---------------------------------------------------------------------
   // state
@@ -112,6 +87,30 @@ const featureData = {
   const idInput = ref<string>('')
   const nameInput = ref<string>('')
   const dateInput = ref<string>('')
+  const pointCoordinates = ref<[number, number] | null>(null); // ポイントの座標情報を格納するデータ変数
+  const shapeData = ref<Array<any>>([]); // データを保持するためのリアクティブ変数
+
+  // APIから図形情報を取得する関数
+  async function fetchShapes() {
+    console.log('kansu')
+    try {
+      const response = await axios.get('http://localhost:5000/api/getshapes');
+      shapeData.value = response.data;
+      console.log(shapeData.value)
+      // 取得した図形データをGeoJSON形式に変換し、vectorSourceに追加
+      const geojsonFormat = new GeoJSON();
+      const features = geojsonFormat.readFeatures({
+        type: 'FeatureCollection',
+        features: shapeData.value,
+      });
+      console.log(features)
+      PointSource.clear(); // PointLayerのデータソースをクリア
+      PointSource.addFeatures(features); // 新しい図形を追加
+      console.log('noterror');
+    } catch (error) {
+      console.error('Error fetching shapes:', error);
+    }
+  }
   
   // ---------------------------------------------------------------------
   // computed
@@ -147,7 +146,8 @@ const featureData = {
    *  @return {void}
    */
   function saveAttributes() {
-    saveToDatabase(featureData);
+    //saveToDatabase(featureData);
+    //saveAttributesToApi();
     selectedFeatures = select?.getFeatures();
     selectedFeatures.forEach(async (feature) => {
       feature.setProperties({
@@ -155,7 +155,7 @@ const featureData = {
         name: nameInput.value,
         inpDate: dateInput.value,
       });
-      });
+    });
   }
 
    /**
@@ -201,9 +201,45 @@ const featureData = {
         name: name,
         inpDate: inpDate,
       });
+      
+
+      // 描画された図形の座標情報を取得
+    // const geometry = feature.getGeometry();
+    // const coordinates = geometry?.getCoordinates();
+
+
+      const shapeData = {
+        type: 'Feature', // 図形のタイプ (GeoJSON形式のFeature)
+        geometry: {
+          type: selectedType.value, // ジオメトリのタイプ (ポイント)
+          coordinates: [0,0], // 座標情報 (経度, 緯度)
+        },
+        properties: {
+          id: id,
+          name: name,
+          inpDate: inpDate,
+        }
+      };
+
+      axios({
+        method: 'post',
+        url: 'http://localhost:5000/api/saveattributes',
+        data: shapeData, // リクエストボディデータ
+        headers: {
+          'Content-Type': 'application/json', // リクエストヘッダーの設定
+        },
+      }).then(response => {
+        console.log('Attributes saved successfully:', response.data);
+        // レスポンスの処理
+      }).catch(error => {
+        console.error('Error saving attributes:', error);
+        // エラーの処理
+      });
+
       map.removeInteraction(draw);
       map.removeInteraction(snap);
       addInteraction();
+
     });
 
     map.addInteraction(draw);
@@ -254,6 +290,12 @@ const featureData = {
   onMounted(() => {
     map.setTarget("map");
 
+    // データをAPIから取得してリアクティブ変数にセット
+   fetchShapes();
+
+   
+
+    
     // 初期Point
     addInteraction();
 
