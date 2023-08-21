@@ -39,7 +39,9 @@
   import Feature from 'ol/Feature'
   import { altKeyOnly, click } from "ol/events/condition";
   import axios from 'axios';
-  import GeoJSON from 'ol/format/GeoJSON.js';
+  import GeoJSON from 'ol/format/GeoJSON';
+  import { fromLonLat, transform } from 'ol/proj';
+  import Point from 'ol/geom/Point';
 
   // ---------------------------------------------------------------------
   // map系
@@ -58,6 +60,8 @@
   let selectedFeatures ;
   let selectedFeature :Feature ;
   let nextid = 1; // 次のid
+  let vectorSource = new VectorSource({ wrapX: false });
+  let vectorLayer = new VectorLayer({ source: vectorSource, });
 
   // OpenStreetMapから地図タイルを表示する
   const raster = new TileLayer({
@@ -66,7 +70,7 @@
 
   // mapを作成
   const  map = new Map({
-    layers: [raster,PointLayer,LineLayer,PolygonLayer,vector],
+    layers: [raster,PointLayer,LineLayer,PolygonLayer,vector,vectorLayer],
     // target: 'map',
     view: new View({
       center: [-11000000, 4600000],
@@ -87,31 +91,8 @@
   const idInput = ref<string>('')
   const nameInput = ref<string>('')
   const dateInput = ref<string>('')
-  const pointCoordinates = ref<[number, number] | null>(null); // ポイントの座標情報を格納するデータ変数
   const shapeData = ref<Array<any>>([]); // データを保持するためのリアクティブ変数
 
-  // APIから図形情報を取得する関数
-  async function fetchShapes() {
-    console.log('kansu')
-    try {
-      const response = await axios.get('http://localhost:5000/api/getshapes');
-      shapeData.value = response.data;
-      console.log(shapeData.value)
-      // 取得した図形データをGeoJSON形式に変換し、vectorSourceに追加
-      const geojsonFormat = new GeoJSON();
-      const features = geojsonFormat.readFeatures({
-        type: 'FeatureCollection',
-        features: shapeData.value,
-      });
-      console.log(features)
-      PointSource.clear(); // PointLayerのデータソースをクリア
-      PointSource.addFeatures(features); // 新しい図形を追加
-      console.log('noterror');
-    } catch (error) {
-      console.error('Error fetching shapes:', error);
-    }
-  }
-  
   // ---------------------------------------------------------------------
   // computed
   // ---------------------------------------------------------------------
@@ -119,6 +100,29 @@
   // ---------------------------------------------------------------------
   // 関数系
   // ---------------------------------------------------------------------
+
+    /**
+   *  DB
+   *
+   *  DBからフィーチャ情報を取得して表示
+   *  @param e DrawEvent
+   *  @return {void}
+   */
+  async function fetchShapes() {
+    console.log('fetchShapesが実行された');
+    try {
+      const response = await axios.get('http://localhost:5000/api/getshapes');
+      shapeData.value = response.data;
+      console.log('shapeData.value:',shapeData.value)
+      const features = new GeoJSON().readFeatures(shapeData.value)
+      console.log('features:',features);
+      PointSource.clear(); // PointLayerのデータソースをクリア
+      PointSource.addFeatures(features); // 新しい図形を追加
+    } catch (error) {
+      console.error('Error fetching shapes:', error);
+    }
+  }
+
     /**
    *  drawendのEvent用関数
    *
@@ -131,7 +135,24 @@
     if (selectedFeatures.getLength() > 0) {
       const feature = selectedFeatures.item(0);
       const featureSource = feature.get('source');
+      // 削除する図形の属性情報を取得
+      const id = feature.get('id');
+
+      // 地図上から図形を削除
       featureSource.removeFeature(feature);
+
+      // データベースから図形を削除するリクエストを送信
+      axios.post(`http://localhost:5000/api/delete`,id)
+      .then(response => {
+        console.log('Shape deleted successfully:', response.data);
+        // レスポンスの処理
+      })
+      .catch(error => {
+        console.error('Error deleting shape:', error);
+        // エラーの処理
+      });
+
+    // 属性情報をクリア
       idInput.value = "" ;
       nameInput.value = "" ;
       dateInput.value = "" ;
@@ -146,8 +167,6 @@
    *  @return {void}
    */
   function saveAttributes() {
-    //saveToDatabase(featureData);
-    //saveAttributesToApi();
     selectedFeatures = select?.getFeatures();
     selectedFeatures.forEach(async (feature) => {
       feature.setProperties({
@@ -191,8 +210,8 @@
     draw.on('drawend', (event) => {
       // 属性追加
       const feature = event.feature;
+      const name = 'name'+nextid;
       const id = nextid++;
-      const name = 'name';
       const today = new Date();
       const formattedDate = `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`;
       const inpDate = formattedDate;
@@ -201,18 +220,16 @@
         name: name,
         inpDate: inpDate,
       });
-      
 
-      // 描画された図形の座標情報を取得
-    // const geometry = feature.getGeometry();
-    // const coordinates = geometry?.getCoordinates();
-
+      const lonlat = feature.getGeometry().getCoordinates();
+      const lat = lonlat[0]
+      const lon = lonlat[1]
 
       const shapeData = {
         type: 'Feature', // 図形のタイプ (GeoJSON形式のFeature)
         geometry: {
           type: selectedType.value, // ジオメトリのタイプ (ポイント)
-          coordinates: [0,0], // 座標情報 (経度, 緯度)
+          coordinates: [lat,lon], // 座標情報 (経度, 緯度)
         },
         properties: {
           id: id,
@@ -291,11 +308,8 @@
     map.setTarget("map");
 
     // データをAPIから取得してリアクティブ変数にセット
-   fetchShapes();
+    fetchShapes();
 
-   
-
-    
     // 初期Point
     addInteraction();
 
@@ -319,12 +333,12 @@
     });
 
     // 編集
-    const modify1 = new Modify({source: PointSource});
-    map.addInteraction(modify1);
-    const modify2 = new Modify({source: LineSource});
-    map.addInteraction(modify2);
-    const modify3 = new Modify({source: PolygonSource});
-    map.addInteraction(modify3);
+    const modifyPoint = new Modify({source: PointSource});
+    map.addInteraction(modifyPoint);
+    const modifyLine = new Modify({source: LineSource});
+    map.addInteraction(modifyLine);
+    const modifyPolygon = new Modify({source: PolygonSource});
+    map.addInteraction(modifyPolygon);
 
     map.addInteraction(select);
     
