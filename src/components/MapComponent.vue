@@ -18,7 +18,7 @@
     <div id="attributes-table">
       <table><tbody>
       <tr>
-        <td>ID: <input type="text" id="idInput" v-model="idInput" /></td>
+        <td>ID: <input type="text" id="idInput" v-model="idInput" :readonly="true" /></td>
         <td>Name: <input type="text" id="nameInput" v-model="nameInput"  /></td>
         <td>Date: <input type="text" id="dateInput" v-model="dateInput"  /></td>
       </tr>
@@ -40,8 +40,6 @@
   import { altKeyOnly, click } from "ol/events/condition";
   import axios from 'axios';
   import GeoJSON from 'ol/format/GeoJSON';
-  import { fromLonLat, transform } from 'ol/proj';
-  import Point from 'ol/geom/Point';
 
   // ---------------------------------------------------------------------
   // map系
@@ -59,7 +57,7 @@
   let select :Select;
   let selectedFeatures ;
   let selectedFeature :Feature ;
-  let nextid = 1; // 次のid
+  let nextid = 0; // 次のid
   let vectorSource = new VectorSource({ wrapX: false });
   let vectorLayer = new VectorLayer({ source: vectorSource, });
 
@@ -124,7 +122,7 @@
   }
 
     /**
-   *  drawendのEvent用関数
+   *  削除ボタンクリックで呼び出す
    *
    *  選択した図形を削除する
    *  @param e DrawEvent
@@ -135,24 +133,20 @@
     if (selectedFeatures.getLength() > 0) {
       const feature = selectedFeatures.item(0);
       const featureSource = feature.get('source');
+      console.log('source:',featureSource)
       // 削除する図形の属性情報を取得
       const id = feature.get('id');
-
       // 地図上から図形を削除
       featureSource.removeFeature(feature);
-
       // データベースから図形を削除するリクエストを送信
       axios.post(`http://localhost:5000/api/delete`,id)
       .then(response => {
         console.log('Shape deleted successfully:', response.data);
-        // レスポンスの処理
       })
       .catch(error => {
         console.error('Error deleting shape:', error);
-        // エラーの処理
       });
-
-    // 属性情報をクリア
+      // テキストボックスの属性情報をクリア
       idInput.value = "" ;
       nameInput.value = "" ;
       dateInput.value = "" ;
@@ -160,7 +154,7 @@
   }
 
     /**
-   *  drawendのEvent用関数
+   *  保存ボタンクリックで呼び出す
    *
    *  属性情報を更新する
    *  @param e DrawEvent
@@ -173,6 +167,20 @@
         id: idInput.value,
         name: nameInput.value,
         inpDate: dateInput.value,
+      });
+      // 情報更新
+      const attributes = {
+        properties: {
+            id: idInput.value,
+            name: nameInput.value,
+            inpDate: dateInput.value,
+          }};
+      axios.post(`http://localhost:5000/api/update`,attributes)
+      .then(response => {
+        console.log('Shape updated successfully:', response.data);
+      })
+      .catch(error => {
+        console.error('Error updating shape:', error);
       });
     });
   }
@@ -203,71 +211,89 @@
       drawOptions.source = PolygonSource;
     }
 
+    // sourceを設定
+    drawOptions.source.on('addfeature', (event) => {
+      const feature = event.feature;
+      console.log('drawoptfeature:',feature);
+      feature?.set('source', drawOptions.source);
+      console.log('drawoptsource:',drawOptions.source);
+    });
+
     // Draw インスタンスを作成
     draw = new Draw(drawOptions);
 
     // 描画が終わったら
     draw.on('drawend', (event) => {
-      // 属性追加
+      console.log('drawoptsource:',drawOptions.source)
       const feature = event.feature;
-      const name = 'name'+nextid;
-      const id = nextid++;
-      const today = new Date();
-      const formattedDate = `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`;
-      const inpDate = formattedDate;
-      feature.setProperties({
-        id: id,
-        name: name,
-        inpDate: inpDate,
-      });
-
-      const lonlat = feature.getGeometry().getCoordinates();
-      const lat = lonlat[0]
-      const lon = lonlat[1]
-
-      const shapeData = {
-        type: 'Feature', // 図形のタイプ (GeoJSON形式のFeature)
-        geometry: {
-          type: selectedType.value, // ジオメトリのタイプ (ポイント)
-          coordinates: [lat,lon], // 座標情報 (経度, 緯度)
-        },
-        properties: {
-          id: id,
+      selectedFeature=event.feature;
+      if(window.confirm("保存しますか")){
+        // 属性追加
+        
+        const name = 'name'+nextid++;
+        //const id = nextid++;
+        const today = new Date();
+        const formattedDate = `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`;
+        const inpDate = formattedDate;
+        feature.setProperties({
+          //id: id,
           name: name,
           inpDate: inpDate,
-        }
-      };
+        });
+        const featureSource = feature.get('source');
+        console.log('source:',featureSource)
 
-      axios({
-        method: 'post',
-        url: 'http://localhost:5000/api/saveattributes',
-        data: shapeData, // リクエストボディデータ
-        headers: {
-          'Content-Type': 'application/json', // リクエストヘッダーの設定
-        },
-      }).then(response => {
-        console.log('Attributes saved successfully:', response.data);
-        // レスポンスの処理
-      }).catch(error => {
-        console.error('Error saving attributes:', error);
-        // エラーの処理
-      });
+        // 座標取得
+        const lonlat = feature.getGeometry().getCoordinates();
+        console.log('lonlat:',lonlat)
 
+        // APIに送る情報
+        const shapeData = {
+          type: 'Feature',
+          geometry: {
+            type: selectedType.value, // ジオメトリのタイプ
+            coordinates: lonlat, // 座標情報 (経度, 緯度)
+          },
+          properties: {
+            //id: id,
+            name: name,
+            inpDate: inpDate,
+          }
+        };
+
+        // APIに送る
+        axios({
+          method: 'post',
+          url: 'http://localhost:5000/api/saveattributes',
+          data: shapeData, // リクエストボディデータ
+          headers: {
+            'Content-Type': 'application/json', // リクエストヘッダーの設定
+          },
+        }).then(response => {
+          console.log('Attributes saved successfully:', response.data);
+          // レスポンスの処理
+        }).catch(error => {
+          console.error('Error saving attributes:', error);
+          // エラーの処理
+        });
+
+      }else{
+
+        // 保存しない場合
+        const feature = event.feature;
+        console.log('feature:',feature);
+        const featureSource = feature.get('source');
+        console.log('source:',featureSource);
+        featureSource.removeFeature(feature);
+      }
       map.removeInteraction(draw);
       map.removeInteraction(snap);
       addInteraction();
-
     });
 
     map.addInteraction(draw);
     snap = new Snap({ source: drawOptions.source });
     map.addInteraction(snap);
-
-    // sourceを設定
-    drawOptions.source.on('addfeature', (event) => {
-      const feature = event.feature;
-      feature?.set('source', drawOptions.source);
-    });
 
   }
 
@@ -310,7 +336,7 @@
     // データをAPIから取得してリアクティブ変数にセット
     fetchShapes();
 
-    // 初期Point
+    // 起動時にPointで描画できる状態にしておく
     addInteraction();
 
     // 選択
