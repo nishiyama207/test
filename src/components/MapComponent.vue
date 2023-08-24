@@ -1,7 +1,7 @@
 <template>
   <div>
     <div id="map" class="map"></div>
-    <label for="type">Draw type:</label>
+    <label for="type">Draw type　</label>
     <select id="type" v-model="selectedType">
       <option value="Point">Point</option>
       <option value="LineString">LineString</option>
@@ -62,8 +62,8 @@
   let selectedFeatures ;
   let selectedFeature :Feature ;
   let nextid = 0; // 次のid
-  let vectorSource = new VectorSource({ wrapX: false });
-  let vectorLayer = new VectorLayer({ source: vectorSource, });
+  //let vectorSource = new VectorSource({ wrapX: false });
+  //let vectorLayer = new VectorLayer({ source: vectorSource, });
 
   // OpenStreetMapから地図タイルを表示する
   const raster = new TileLayer({
@@ -72,7 +72,7 @@
 
   // mapを作成
   const  map = new Map({
-    layers: [raster,PointLayer,LineLayer,PolygonLayer,vector,vectorLayer],
+    layers: [raster,PointLayer,LineLayer,PolygonLayer,vector],
     // target: 'map',
     view: new View({
       center: [-11000000, 4600000],
@@ -132,9 +132,9 @@
       });
 
       // 各データソースに図形を追加
-      PointSource.clear();
-      LineSource.clear();
-      PolygonSource.clear();
+      // PointSource.clear();
+      // LineSource.clear();
+      // PolygonSource.clear();
       PointSource.addFeatures(pointFeatures);
       LineSource.addFeatures(lineFeatures);
       PolygonSource.addFeatures(polygonFeatures);
@@ -155,9 +155,7 @@
     selectedFeatures = select?.getFeatures();
     if (selectedFeatures.getLength() > 0) {
       const feature = selectedFeatures.item(0);
-      console.log(feature);
       const featureSource = feature.get('source');
-      console.log('source:',featureSource)
       // 削除する図形の属性情報を取得
       const id = feature.get('id');
       // 地図上から図形を削除
@@ -170,7 +168,7 @@
       .catch(error => {
         console.error('Error deleting shape:', error);
       });
-      // テキストボックスの属性情報をクリア
+      // テキストボックスクリア
       idInput.value = "" ;
       nameInput.value = "" ;
       dateInput.value = "" ;
@@ -198,7 +196,8 @@
             id: idInput.value,
             name: nameInput.value,
             inpDate: dateInput.value,
-          }};
+        }
+      };
       axios.post(`http://localhost:5000/api/update`,attributes)
       .then(response => {
         console.log('Shape updated successfully:', response.data);
@@ -217,6 +216,8 @@
    *  @return {void}
    */
   function addInteraction() {
+    console.log('addInteractionが実行された');
+
     // 以前の描画とスナップのインタラクションを削除
     map.removeInteraction(draw);
     map.removeInteraction(snap);
@@ -229,60 +230,61 @@
     // 選択された図形の種類に応じてソースを設定
     if (selectedType.value === 'Point') {
       drawOptions.source = PointSource;
+      console.log('pointsource');
     } else if (selectedType.value === 'LineString') {
       drawOptions.source = LineSource;
+      console.log('linesource');
     } else if (selectedType.value === 'Polygon') {
       drawOptions.source = PolygonSource;
+      console.log('polygonsource');
     }
-
     // sourceを設定
     drawOptions.source.on('addfeature', (event) => {
       const feature = event.feature;
-      console.log('drawoptfeature:',feature);
       feature?.set('source', drawOptions.source);
-      console.log('drawoptsource:',drawOptions.source);
     });
+
+    console.log('sourceのfeature0:',drawOptions.source.getFeatures());
 
     // Draw インスタンスを作成
     draw = new Draw(drawOptions);
 
     // 描画が終わったら
     draw.on('drawend', (event) => {
-      console.log('drawoptsource:',drawOptions.source)
+      console.log('描画された')
+      
       const feature = event.feature;
-      if(window.confirm("保存しますか")){
-        // 属性追加        
-        const name = 'name'+nextid++;
-        //const id = nextid++;
-        const today = new Date();
-        const formattedDate = `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`;
-        const inpDate = formattedDate;
-        feature.setProperties({
+      // 属性追加        
+      const name = 'name'+nextid++;
+      //const id = nextid++;
+      const today = new Date();
+      const formattedDate = `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`;
+      const inpDate = formattedDate;
+      feature.setProperties({
+        //id: id,
+        name: name,
+        inpDate: inpDate,
+      });
+
+      // 座標取得
+      const lonlat = feature.getGeometry().getCoordinates();
+      console.log('lonlat:',lonlat)
+
+      // APIに送る情報
+      const shapeData = {
+        type: 'Feature',
+        geometry: {
+          type: selectedType.value, // ジオメトリのタイプ
+          coordinates: lonlat, // 座標情報 (経度, 緯度)
+        },
+        properties: {
           //id: id,
           name: name,
           inpDate: inpDate,
-        });
-        const featureSource = feature.get('source');
-        console.log('1source:',featureSource)
+        }
+      };
 
-        // 座標取得
-        const lonlat = feature.getGeometry().getCoordinates();
-        console.log('lonlat:',lonlat)
-
-        // APIに送る情報
-        const shapeData = {
-          type: 'Feature',
-          geometry: {
-            type: selectedType.value, // ジオメトリのタイプ
-            coordinates: lonlat, // 座標情報 (経度, 緯度)
-          },
-          properties: {
-            //id: id,
-            name: name,
-            inpDate: inpDate,
-          }
-        };
-
+      if(window.confirm("保存しますか")){
         // APIに送る
         axios({
           method: 'post',
@@ -300,21 +302,26 @@
         });
 
       }else{
-
+        console.log('キャンセルが押された')
+        // この時点ではevent.featureはdrawOptions.sourceに追加されていない
+        console.log('sourceのfeature1:',drawOptions.source.getFeatures());
+        // もう一度描画するとgetFeaturesの数が1つ増えている
+        
         // 保存しない場合の処理
-        drawOptions.source.removeFeature(feature);
+        drawOptions.source.removeFeature(event.feature);
 
       }
       map.removeInteraction(draw);
       map.removeInteraction(snap);
       addInteraction();
+      // この時点ではevent.featureはdrawOptions.sourceに追加されていない
+      console.log('sourceのfeature2:',drawOptions.source.getFeatures());
     });
-
-    
     map.addInteraction(draw);
     snap = new Snap({ source: drawOptions.source });
     map.addInteraction(snap);
-
+    // この時点ではevent.featureはdrawOptions.sourceに追加されていない
+    console.log('sourceのfeature3:',PointSource.getFeatures())
   }
 
   // ---------------------------------------------------------------------
@@ -371,6 +378,7 @@
     // 選択中の図形を取得し、属性情報をテキストボックスにセットする
     select.on('select', (event) => {
       selectedFeature = event.target.getFeatures().getArray()[0]; // 選択された最初の図形を取得
+      console.log('select:',selectedFeature)
       if (selectedFeature) {
         idInput.value = selectedFeature.get('id') ;
         nameInput.value = selectedFeature.get('name') ;
