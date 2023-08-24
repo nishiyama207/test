@@ -40,6 +40,7 @@
   import { altKeyOnly, click } from "ol/events/condition";
   import axios from 'axios';
   import GeoJSON from 'ol/format/GeoJSON';
+  import { Geometry } from 'ol/geom';
 
   // ---------------------------------------------------------------------
   // map系
@@ -54,6 +55,9 @@
   const PointLayer = new VectorLayer({ source: PointSource, });
   const LineLayer = new VectorLayer({ source: LineSource, });
   const PolygonLayer = new VectorLayer({ source: PolygonSource, });
+  const pointFeatures: Feature<Geometry>[] = [];
+  const lineFeatures: Feature<Geometry>[] = [];
+  const polygonFeatures: Feature<Geometry>[] = [];
   let select :Select;
   let selectedFeatures ;
   let selectedFeature :Feature ;
@@ -111,11 +115,30 @@
     try {
       const response = await axios.get('http://localhost:5000/api/getshapes');
       shapeData.value = response.data;
-      console.log('shapeData.value:',shapeData.value)
-      const features = new GeoJSON().readFeatures(shapeData.value)
-      console.log('features:',features);
-      PointSource.clear(); // PointLayerのデータソースをクリア
-      PointSource.addFeatures(features); // 新しい図形を追加
+      console.log('shapeData.value:', shapeData.value);
+
+      // データを図形の種類ごとに分類
+      shapeData.value.features.forEach((feature: { geometry: { type: any; }; }) => {
+        const geometryType = feature.geometry.type;
+        const Feature = new GeoJSON().readFeature(feature);
+        
+        if (geometryType === 'Point') {
+          pointFeatures.push(Feature);
+        } else if (geometryType === 'LineString') {
+          lineFeatures.push(Feature);
+        } else if (geometryType === 'Polygon') {
+          polygonFeatures.push(Feature);
+        }
+      });
+
+      // 各データソースに図形を追加
+      PointSource.clear();
+      LineSource.clear();
+      PolygonSource.clear();
+      PointSource.addFeatures(pointFeatures);
+      LineSource.addFeatures(lineFeatures);
+      PolygonSource.addFeatures(polygonFeatures);
+      
     } catch (error) {
       console.error('Error fetching shapes:', error);
     }
@@ -132,6 +155,7 @@
     selectedFeatures = select?.getFeatures();
     if (selectedFeatures.getLength() > 0) {
       const feature = selectedFeatures.item(0);
+      console.log(feature);
       const featureSource = feature.get('source');
       console.log('source:',featureSource)
       // 削除する図形の属性情報を取得
@@ -226,10 +250,8 @@
     draw.on('drawend', (event) => {
       console.log('drawoptsource:',drawOptions.source)
       const feature = event.feature;
-      selectedFeature=event.feature;
       if(window.confirm("保存しますか")){
-        // 属性追加
-        
+        // 属性追加        
         const name = 'name'+nextid++;
         //const id = nextid++;
         const today = new Date();
@@ -241,7 +263,7 @@
           inpDate: inpDate,
         });
         const featureSource = feature.get('source');
-        console.log('source:',featureSource)
+        console.log('1source:',featureSource)
 
         // 座標取得
         const lonlat = feature.getGeometry().getCoordinates();
@@ -279,18 +301,16 @@
 
       }else{
 
-        // 保存しない場合
-        const feature = event.feature;
-        console.log('feature:',feature);
-        const featureSource = feature.get('source');
-        console.log('source:',featureSource);
-        featureSource.removeFeature(feature);
+        // 保存しない場合の処理
+        drawOptions.source.removeFeature(feature);
+
       }
       map.removeInteraction(draw);
       map.removeInteraction(snap);
       addInteraction();
     });
 
+    
     map.addInteraction(draw);
     snap = new Snap({ source: drawOptions.source });
     map.addInteraction(snap);
